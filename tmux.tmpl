@@ -1,0 +1,32 @@
+#!/bin/bash
+
+BASE="{{ .Root }}"
+SESSION="{{ .Name }}"
+SESSIONEXISTS=$(tmux list-sessions | grep $SESSION)
+
+if [ "$SESSIONEXISTS" = "" ]
+then
+	cd $BASE || return
+
+	{{range $index, $element := .Win}}
+	{{if isFirst $index}}
+		{{if $element.Nvim}}
+		tmux new-session -d -s $SESSION
+		tmux send-keys -t {{$element.Index}} 'cd {{ $element.Root }}' C-m 'nvim' C-m
+		{{else}}
+		tmux new-session -d -s $SESSION
+		tmux send-keys -t {{$element.Index}} 'cd {{ $element.Root }}' C-m
+		{{end}}
+	{{else}}
+		{{if $element.Nvim}}
+		tmux new-window -t $SESSION
+		tmux send-keys -t {{$element.Index}} 'cd {{ $element.Root }}' C-m 'nvim' C-m
+		{{else}}
+		tmux new-window -t $SESSION
+		tmux send-keys -t {{$element.Index}} 'cd {{ $element.Root }}' C-m
+		{{end}}
+	{{end}}
+	{{end}}
+fi
+
+tmux attach-session -t $SESSION:1
