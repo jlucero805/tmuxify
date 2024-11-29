@@ -2,12 +2,16 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
 	"os"
 	"path/filepath"
 	"text/template"
 
 	"github.com/BurntSushi/toml"
 )
+
+//go:embed tmux.tmpl
+var embeddedTemplate []byte
 
 type Window struct {
 	Root  string
@@ -56,7 +60,7 @@ func tmuxify(entry os.DirEntry) {
 		"isFirst": func(index int) bool {
 			return index == 0
 		},
-	}).ParseFiles("tmux.tmpl")
+	}).Parse(string(embeddedTemplate))
 	if err != nil {
 		panic(err)
 	}
