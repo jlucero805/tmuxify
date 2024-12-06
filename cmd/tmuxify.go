@@ -36,45 +36,88 @@ type Data struct {
 
 var DATA = &Data{}
 
-func tmuxify(entry os.DirEntry) {
-	entryFilepath := filepath.Join(DATA.DataDir, entry.Name())
-	data, err := os.ReadFile(filepath.Join(DATA.ConfigDir, entry.Name()))
+func readConfigFile(name string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(DATA.ConfigDir, name))
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 
+	return string(data), nil
+}
+
+func parseSession(sessionString string) (Session, error) {
 	var session Session
-	_, err = toml.Decode(
-		string(data),
+	_, err := toml.Decode(
+		sessionString,
 		&session,
 	)
 	if err != nil {
-		panic(err)
+		return Session{}, err
 	}
 
+	indexSessionWins(&session)
+
+	return session, nil
+}
+
+func indexSessionWins(session *Session) {
 	for i := 0; i < len(session.Win); i++ {
 		session.Win[i].Index = i + 1
 	}
+}
 
-	tmpl, err := template.New("tmux.tmpl").Funcs(template.FuncMap{
+func writeDataFile(data, name string) error {
+	dataFilePath := filepath.Join(DATA.DataDir, name)
+
+	err := os.MkdirAll(filepath.Dir(dataFilePath), 0755)
+	if err != nil {
+		return err
+	}
+
+	err = os.WriteFile(dataFilePath, []byte(data), 0644)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func renderTemplate(session Session) (string, error) {
+	tmpl, err := template.New("tmuxify").Funcs(template.FuncMap{
 		"isFirst": func(index int) bool {
 			return index == 0
 		},
 	}).Parse(string(embeddedTemplate))
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 
 	var buf bytes.Buffer
 	err = tmpl.Execute(&buf, session)
-	templateString := buf.String()
+	if err != nil {
+		return "", err
+	}
 
-	err = os.MkdirAll(filepath.Dir(entryFilepath), 0755)
+	return buf.String(), nil
+}
+
+func tmuxify(entry os.DirEntry) {
+	data, err := readConfigFile(entry.Name())
 	if err != nil {
 		panic(err)
 	}
 
-	err = os.WriteFile(entryFilepath, []byte(templateString), 0644)
+	session, err := parseSession(data)
+	if err != nil {
+		panic(err)
+	}
+
+	templateString, err := renderTemplate(session)
+	if err != nil {
+		panic(err)
+	}
+
+	err = writeDataFile(templateString, entry.Name())
 	if err != nil {
 		panic(err)
 	}
@@ -86,10 +129,10 @@ func tmuxifyDirEntries(dirEntries []os.DirEntry) {
 	}
 }
 
-func main() {
+func getTmuxifyConfigDirEntries() ([]os.DirEntry, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	DATA.ConfigDir = filepath.Join(homeDir, CONFIG_DIR_SUFFIX)
@@ -97,6 +140,15 @@ func main() {
 
 	entries, err := os.ReadDir(DATA.ConfigDir)
 	if err != err {
+		return nil, err
+	}
+
+	return entries, nil
+}
+
+func main() {
+	entries, err := getTmuxifyConfigDirEntries()
+	if err != nil {
 		panic(err)
 	}
 
